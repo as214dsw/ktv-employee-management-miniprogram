@@ -1,0 +1,32 @@
+<?php
+require_once '../db.php';
+$pdo = getPDO();
+
+$data = json_decode(file_get_contents('php://input'), true);
+$openid = $data['openid'] ?? '';
+$team_id = $data['team_id'] ?? 0;
+
+if (empty($openid) || $team_id <= 0) {
+    echo json_encode(['code' => 400, 'msg' => '参数错误']);
+    exit;
+}
+
+// 禁止创建者退出
+$stmt = $pdo->prepare("SELECT creator_openid FROM teams WHERE id = ?");
+$stmt->execute([$team_id]);
+$row = $stmt->fetch();
+if ($row && $row['creator_openid'] === $openid) {
+    echo json_encode(['code' => 403, 'msg' => '创建者不能退出团队']);
+    exit;
+}
+
+// 删除成员记录
+$stmt = $pdo->prepare("DELETE FROM team_members WHERE team_id = ? AND user_openid = ?");
+$stmt->execute([$team_id, $openid]);
+
+// 若当前团队为该团队，则清除
+$stmt = $pdo->prepare("UPDATE users SET current_team_id = NULL WHERE openid = ? AND current_team_id = ?");
+$stmt->execute([$openid, $team_id]);
+
+echo json_encode(['code' => 0, 'msg' => '退出团队成功']);
+?>
