@@ -1,0 +1,35 @@
+<?php
+require_once '../db.php';
+$pdo = getPDO();
+
+$data = json_decode(file_get_contents('php://input'), true);
+$openid = $data['openid'] ?? '';
+$team_id = $data['team_id'] ?? 0;
+
+if (empty($openid) || $team_id <= 0) {
+    echo json_encode(['code' => 400, 'msg' => '参数错误']);
+    exit;
+}
+
+// 检查团队是否存在
+$stmt = $pdo->prepare("SELECT id FROM teams WHERE id = ?");
+$stmt->execute([$team_id]);
+if (!$stmt->fetch()) {
+    echo json_encode(['code' => 404, 'msg' => '团队不存在']);
+    exit;
+}
+
+// 检查是否已加入
+$stmt = $pdo->prepare("SELECT 1 FROM team_members WHERE team_id = ? AND user_openid = ?");
+$stmt->execute([$team_id, $openid]);
+if ($stmt->fetch()) {
+    echo json_encode(['code' => 403, 'msg' => '已加入该团队']);
+    exit;
+}
+
+// 加入团队（默认普通成员）
+$stmt = $pdo->prepare("INSERT INTO team_members (team_id, user_openid, role) VALUES (?, ?, 'member')");
+$stmt->execute([$team_id, $openid]);
+
+echo json_encode(['code' => 0, 'msg' => '加入团队成功']);
+?>
