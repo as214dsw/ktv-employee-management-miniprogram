@@ -1,0 +1,46 @@
+<?php
+require_once '../db.php';
+$pdo = getPDO();
+
+$data = json_decode(file_get_contents('php://input'), true);
+$operator_openid = $data['openid'] ?? '';         // 操作者
+$team_id = $data['team_id'] ?? 0;
+$target_openid = $data['target_openid'] ?? '';
+$new_role = $data['new_role'] ?? '';
+
+$valid_roles = ['admin', 'manager', 'assistant', 'member'];
+if (!in_array($new_role, $valid_roles)) {
+    echo json_encode(['code' => 400, 'msg' => '无效岗位']);
+    exit;
+}
+
+// 检查操作者是否为管理员
+$stmt = $pdo->prepare("SELECT role FROM team_members WHERE team_id = ? AND user_openid = ?");
+$stmt->execute([$team_id, $operator_openid]);
+$operator = $stmt->fetch();
+if (!$operator || $operator['role'] !== 'admin') {
+    echo json_encode(['code' => 403, 'msg' => '仅管理员可修改岗位']);
+    exit;
+}
+
+// 更新目标成员岗位
+$stmt = $pdo->prepare("UPDATE team_members SET role = ? WHERE team_id = ? AND user_openid = ?");
+$stmt->execute([$new_role, $team_id, $target_openid]);
+
+// 返回权限映射（供前端控制显示）
+$permissions_map = [
+    'admin' => ['view_all', 'edit_all', 'manage_members', 'view_salary'],
+    'manager' => ['view_salary', 'view_all_schedule', 'edit_schedule'],
+    'assistant' => ['view_own_schedule', 'view_own_attendance'],
+    'member' => ['view_personal_info']
+];
+
+echo json_encode([
+    'code' => 0,
+    'msg' => '岗位更新成功',
+    'data' => [
+        'role' => $new_role,
+        'permissions' => $permissions_map[$new_role]
+    ]
+]);
+?>
