@@ -1,0 +1,17 @@
+-- 添加充值日志表，支持多人多次充值记录
+CREATE TABLE IF NOT EXISTS recharge_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    initiator_openid VARCHAR(128) NOT NULL,  -- 充值发起人（客户openid）
+    target_openid VARCHAR(128) NOT NULL,     -- 充值目标（员工openid）
+    amount DECIMAL(10,2) NOT NULL,           -- 充值金额
+    recharge_time DATETIME DEFAULT CURRENT_TIMESTAMP,  -- 充值时间
+    status ENUM('success', 'pending', 'failed') DEFAULT 'success',  -- 充值状态
+    note TEXT,                                       -- 备注（如“续充会员卡”）
+    FOREIGN KEY (initiator_openid) REFERENCES users(openid) ON DELETE CASCADE,
+    FOREIGN KEY (target_openid) REFERENCES users(openid) ON DELETE CASCADE,
+    INDEX idx_target_openid (target_openid),         -- 优化按员工查询
+    INDEX idx_recharge_time (recharge_time)          -- 优化时间范围统计
+);
+
+-- 微调memberships表，添加累计充值金额字段，便于快速统计
+ALTER TABLE memberships ADD COLUMN total_recharged DECIMAL(10,2) DEFAULT 0.00 AFTER recharge_amount;
