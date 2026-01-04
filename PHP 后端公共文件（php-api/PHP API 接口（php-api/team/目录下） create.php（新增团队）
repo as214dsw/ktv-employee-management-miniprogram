@@ -1,0 +1,46 @@
+<?php
+require_once '../../db.php';
+$pdo = getPDO();
+
+$data = json_decode(file_get_contents('php://input'), true);
+$openid = $data['openid'] ?? '';
+$team_name = $data['team_name'] ?? '';
+$description = $data['description'] ?? '';
+
+if (empty($openid) || empty($team_name)) {
+    echo json_encode(['code' => 400, 'msg' => '参数缺失']); exit;
+}
+
+// 会员检查
+$stmt = $pdo->prepare("SELECT id FROM memberships WHERE openid = ? AND status = 'active' AND expire_date > NOW()");
+$stmt->execute([$openid]);
+if (!$stmt->fetch()) {
+    echo json_encode(['code' => 402, 'msg' => '请先充值会员']); exit;
+}
+
+// 团队名唯一检查
+$stmt = $pdo->prepare("SELECT id FROM teams WHERE name = ?");
+$stmt->execute([$team_name]);
+if ($stmt->fetch()) {
+    echo json_encode(['code' => 403, 'msg' => '团队名已存在']); exit;
+}
+
+$pdo->beginTransaction();
+try {
+    $stmt = $pdo->prepare("INSERT INTO teams (name, description, creator_openid) VALUES (?, ?, ?)");
+    $stmt->execute([$team_name, $description, $openid]);
+    $team_id = $pdo->lastInsertId();
+
+    $stmt = $pdo->prepare("INSERT INTO team_members (team_id, user_openid, role) VALUES (?, ?, 'admin')");
+    $stmt->execute([$team_id, $openid]);
+
+    $stmt = $pdo->prepare("UPDATE users SET current_team_id = ? WHERE openid = ?");
+    $stmt->execute([$team_id, $openid]);
+
+    $pdo->commit();
+    echo json_encode(['code' => 0, 'msg' => '创建成功', 'data' => ['team_id' => $team_id, 'role' => 'admin']]);
+} catch (Exception $e) {
+    $pdo->rollBack();
+    echo json_encode(['code' => 500, 'msg' => '创建失败']);
+}
+?>
