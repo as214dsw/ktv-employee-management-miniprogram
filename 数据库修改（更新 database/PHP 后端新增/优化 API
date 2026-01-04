@@ -1,0 +1,40 @@
+<?php
+require_once '../db.php';
+$pdo = getPDO();
+
+$data = json_decode(file_get_contents('php://input'), true);
+$initiator_openid = $data['initiator_openid'] ?? '';  // 客户openid
+$target_openid = $data['target_openid'] ?? '';        // 目标员工openid
+$amount = $data['amount'] ?? 0.00;
+$note = $data['note'] ?? '';
+
+if (empty($initiator_openid) || empty($target_openid) || $amount <= 0) {
+    echo json_encode(['code' => 400, 'msg' => '参数缺失或无效']);
+    exit;
+}
+
+// 验证用户存在
+$stmt = $pdo->prepare("SELECT id FROM users WHERE openid IN (?, ?)");
+$stmt->execute([$initiator_openid, $target_openid]);
+if ($stmt->rowCount() < 2) {
+    echo json_encode(['code' => 404, 'msg' => '用户不存在']);
+    exit;
+}
+
+$pdo->beginTransaction();
+try {
+    // 记录充值日志
+    $stmt = $pdo->prepare("INSERT INTO recharge_logs (initiator_openid, target_openid, amount, note) VALUES (?, ?, ?, ?)");
+    $stmt->execute([$initiator_openid, $target_openid, $amount, $note]);
+
+    // 更新目标会员状态（激活/续期，假设会员有效期加30天/笔）
+    $stmt = $pdo->prepare("UPDATE memberships SET status = 'active', expire_date = DATE_ADD(COALESCE(expire_date, NOW()), INTERVAL 30 DAY), total_recharged = total_recharged + ? WHERE openid = ?");
+    $stmt->execute([$amount, $target_openid]);
+
+    $pdo->commit();
+    echo json_encode(['code' => 0, 'msg' => '充值成功', 'data' => ['log_id' => $pdo->lastInsertId()]]);
+} catch (Exception $e) {
+    $pdo->rollBack();
+    echo json_encode(['code' => 500, 'msg' => '充值失败，请重试']);
+}
+?>
