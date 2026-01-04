@@ -1,0 +1,22 @@
+<?php
+header('Content-Type: application/json; charset=utf-8');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: POST, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type');
+
+function getPDO() {
+    $host = 'localhost';
+    $dbname = 'ktv_management';
+    $username = 'root';      // 请根据实际情况修改
+    $password = '';          // 请根据实际情况修改
+
+    try {
+        $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $username, $password);
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        return $pdo;
+    } catch (PDOException $e) {
+        echo json_encode(['code' => 500, 'msg' => '数据库连接失败']);
+        exit;
+    }
+}
+?>
